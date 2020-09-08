@@ -13,6 +13,7 @@ type
 
   generic TgTaskWorkerThread<T> = class(TThread)
   private
+    FCount: Integer;
     FThreadList: TThreadList;
     FUnblockEvent: pRTLEvent;  // or defrosting and terminating while the thread is pending tasks
     FTerminateEvent: pRTLEvent;   // for terminating while the thread is delayed
@@ -29,6 +30,7 @@ type
     procedure Execute; override;
     procedure PushTask(ATask: T);
     procedure TerminateWorker;
+    property Count: Integer read FCount;
   end;
 
 implementation
@@ -61,6 +63,7 @@ begin
     Result:=T(AList[0]);
     AList.Delete(0);
   end;
+  FCount:=AList.Count;
   FThreadList.UnlockList;
 end;
 
@@ -81,9 +84,11 @@ end;
 constructor TgTaskWorkerThread.Create;
 begin
   inherited Create(True);
+  FreeOnTerminate:=False;
   FThreadList:=TThreadList.Create;
   FUnblockEvent:=RTLEventCreate;
   FTerminateEvent:=RTLEventCreate;
+  FCount:=0
 end;
 
 destructor TgTaskWorkerThread.Destroy;
@@ -113,6 +118,7 @@ end;
 procedure TgTaskWorkerThread.PushTask(ATask: T);
 begin
   FThreadList.Add(ATask);
+  Inc(FCount);
   RTLeventSetEvent(FUnblockEvent);
 end;
 
