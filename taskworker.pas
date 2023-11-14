@@ -5,7 +5,8 @@ unit taskworker;
 interface
 
 uses
-  Classes, SysUtils;
+  Classes, SysUtils, eventlog
+  ;
 
 type
 
@@ -13,6 +14,7 @@ type
 
   generic TgTaskWorkerThread<T> = class(TThread)
   private
+    FLogger: TEventLog;
     FCount: Integer;
     FThreadList: TThreadList;
     FUnblockEvent: pRTLEvent;  // or defrosting and terminating while the thread is pending tasks
@@ -31,6 +33,7 @@ type
     procedure PushTask(ATask: T);
     procedure TerminateWorker;
     property Count: Integer read FCount;
+    property Logger: TEventLog read FLogger;
   end;
 
 implementation
@@ -88,11 +91,13 @@ begin
   FThreadList:=TThreadList.Create;
   FUnblockEvent:=RTLEventCreate;
   FTerminateEvent:=RTLEventCreate;
-  FCount:=0
+  FCount:=0;
+  FLogger:=TEventLog.Create(nil);
 end;
 
 destructor TgTaskWorkerThread.Destroy;
 begin
+  FLogger.Free;
   RTLeventdestroy(FTerminateEvent);
   RTLeventdestroy(FUnblockEvent);
   FThreadList.Free;
