@@ -33,6 +33,8 @@ type
     procedure ProcessTask(ATask: TLogEventTask); override;
   end;
 
+  TLogLevel = (llDebug, llInfo, llWarning, llError, llNone);
+
   { TThreadedEventLog }
 
   TThreadedEventLog = class(TPersistent)
@@ -41,7 +43,9 @@ type
     FAppendContent: Boolean;
     FEventLogThread: TEventLogThread;
     FFileName: String;
+    FLogLevel: TLogLevel;
     FPaused: Boolean;
+    function CanLog(aEventType: TEventType): Boolean;
     procedure EnsureActive;
   public
     constructor Create;
@@ -55,6 +59,7 @@ type
     property Active: Boolean read FActive;
     property AppendContent: Boolean read FAppendContent write FAppendContent;
     property EventLogThread: TEventLogThread read FEventLogThread;
+    property LogLevel: TLogLevel read FLogLevel write FLogLevel;
     property FileName: String read FFileName write FFileName;
     property Paused: Boolean read FPaused write FPaused;
   end;
@@ -98,6 +103,20 @@ begin
 end;
 
 { TThreadedEventLog }
+
+function TThreadedEventLog.CanLog(aEventType: TEventType): Boolean;
+begin
+  if FLogLevel=llNone then
+    Exit(False);
+  case aEventType of
+    etError:   Result:=FLogLevel<=llError;
+    etWarning: Result:=FLogLevel<=llWarning;
+    etInfo:    Result:=FLogLevel<=llInfo;
+    etDebug:   Result:=FLogLevel<=llDebug;
+  else
+    Result:=FLogLevel<=llInfo;
+  end;
+end;
 
 procedure TThreadedEventLog.EnsureActive;
 begin
@@ -149,7 +168,9 @@ var
   aTask: TLogEventTask;
 begin
   If Paused then
-    exit;
+    Exit;
+  if not CanLog(aEventType) then
+    Exit;
   EnsureActive;
   aTask:=TLogEventTask.Create;
   aTask.DateTime:=Now;
