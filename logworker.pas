@@ -64,11 +64,29 @@ type
     property Paused: Boolean read FPaused write FPaused;
   end;
 
+function LogLevelToString(aLogLevel: TLogLevel): String;
+function StringToLogLevel(const S: String): TLogLevel;
+
 implementation
 
 uses
   eventlog
   ;
+
+const
+  _loglevelalias: array[TLogLevel] of String = ('debug', 'info', 'warning', 'error', '');
+
+function LogLevelToString(aLogLevel: TLogLevel): String;
+begin
+  Result:=_loglevelalias[aLogLevel];
+end;
+
+function StringToLogLevel(const S: String): TLogLevel;
+begin
+  for Result in TLogLevel do
+    if SameStr(S, _loglevelalias[Result]) then
+      Exit;
+end;
 
 { TLogEventTask }
 
@@ -134,6 +152,7 @@ constructor TThreadedEventLog.Create;
 begin
   FActive:=False;
   FEventLogThread:=TEventLogThread.Create;
+  FLogLevel:=llInfo;
 end;
 
 destructor TThreadedEventLog.Destroy;
