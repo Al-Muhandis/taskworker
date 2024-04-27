@@ -49,7 +49,8 @@ type
     procedure EnsureActive;
   public
     constructor Create;
-    destructor Destroy; override;          
+    destructor Destroy; override;
+    procedure Activate;
     procedure Debug(const aMessage: String);
     procedure Error(const aMessage: String);
     Procedure Error (const aFormat : String; Args : Array of const);
@@ -116,7 +117,7 @@ begin
       ATask.Free;
     end;
   except
-    on E: Exception do Logger.Error('Process task. '+E.Classname+': '+E.message);
+    on E: Exception do Logger.Error('EventLogThread. '+E.Classname+': '+E.message);
   end;
 end;
 
@@ -160,6 +161,11 @@ begin
   FEventLogThread.TerminateWorker;
   FEventLogThread.Free;
   inherited Destroy;
+end;
+
+procedure TThreadedEventLog.Activate;
+begin
+  EnsureActive;
 end;
 
 procedure TThreadedEventLog.Debug(const aMessage: String);

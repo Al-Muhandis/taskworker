@@ -16,13 +16,15 @@ type
   private
     FLogger: TEventLog;
     FCount: Integer;
+    FOnIdle: TNotifyEvent;
     FThreadList: TThreadList;
     FUnblockEvent: pRTLEvent;  // or defrosting and terminating while the thread is pending tasks
     FTerminateEvent: pRTLEvent;   // for terminating while the thread is delayed
     procedure ClearTasks;
     function PopTask: T;
     function WaitingForTask: Boolean;
-  protected
+  protected                                           
+    procedure DoIdle; virtual;
     procedure ProcessTask(ATask: T); virtual; abstract;
     function WaitingDelay(ADelay: Integer): Boolean;
     property ThreadList: TThreadList read FThreadList write FThreadList;
@@ -34,6 +36,7 @@ type
     procedure TerminateWorker;
     property Count: Integer read FCount;
     property Logger: TEventLog read FLogger;
+    property OnIdle: TNotifyEvent read FOnIdle write FOnIdle;
   end;
 
 implementation
@@ -42,6 +45,7 @@ implementation
 
 function TgTaskWorkerThread.WaitingForTask: Boolean;
 begin
+  DoIdle;
   RTLeventWaitFor(FUnblockEvent);
   RTLeventResetEvent(FUnblockEvent);
   Result:=not Terminated;
@@ -82,6 +86,12 @@ begin
        ATask.Free;
      end;
   until ATask=nil;
+end;
+
+procedure TgTaskWorkerThread.DoIdle;
+begin
+  if Assigned(FOnIdle) then
+    FOnIdle(Self);
 end;
 
 constructor TgTaskWorkerThread.Create;
