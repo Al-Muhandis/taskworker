@@ -96,7 +96,7 @@ end;
 
 constructor TgTaskWorkerThread.Create;
 begin
-  inherited Create(True);
+  inherited Create(True, DefaultStackSize*10);
   FreeOnTerminate:=False;
   FThreadList:=TThreadList.Create;
   FUnblockEvent:=RTLEventCreate;
@@ -118,16 +118,21 @@ procedure TgTaskWorkerThread.Execute;
 var
   ATask: T;
 begin
-  while not Terminated do
-  begin
-    if not WaitingForTask then break;
-    repeat
-      ATask:=PopTask;
-      if Assigned(ATask) then
-        ProcessTask(ATask);
-    until (ATask=nil) or Terminated;
+  try
+    while not Terminated do
+    begin
+      if not WaitingForTask then break;
+      repeat
+        ATask:=PopTask;
+        if Assigned(ATask) then
+          ProcessTask(ATask);
+      until (ATask=nil) or Terminated;
+    end;
+    ClearTasks;
+  except
+    on E: Exception do
+      Logger.Error('Fatal error with %s. %s: %s', [ClassName, E.ClassName, E.Message]);
   end;
-  ClearTasks;
 end;
 
 procedure TgTaskWorkerThread.PushTask(ATask: T);
