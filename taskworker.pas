@@ -23,7 +23,7 @@ type
     procedure ClearTasks;
     function PopTask: T;
     function WaitingForTask: Boolean;
-  protected                                           
+  protected
     procedure DoIdle; virtual;
     procedure ProcessTask(ATask: T); virtual; abstract;
     function WaitingDelay(ADelay: Integer): Boolean;
@@ -64,14 +64,17 @@ var
 begin
   Result:=nil;
   AList:=FThreadList.LockList;
-  i:=AList.Count;
-  if i>0 then
-  begin
-    Result:=T(AList[0]);
-    AList.Delete(0);
+  try
+    i:=AList.Count;
+    if i>0 then
+    begin
+      Result:=T(AList[0]);
+      AList.Delete(0);
+    end;
+    FCount:=AList.Count;
+  finally                
+    FThreadList.UnlockList;
   end;
-  FCount:=AList.Count;
-  FThreadList.UnlockList;
 end;
 
 procedure TgTaskWorkerThread.ClearTasks;
@@ -80,10 +83,10 @@ var
 begin
   repeat
      ATask:=PopTask;
-     if Assigned(ATask) then
+     if ATask is TObject then
      begin
        { TODO : Save tasks for futher processing (for example after thread restart) }
-       ATask.Free;
+       TObject(ATask).Free;
      end;
   until ATask=nil;
 end;
