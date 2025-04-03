@@ -83,11 +83,8 @@ var
 begin
   repeat
      ATask:=PopTask;
-     if ATask is TObject then
-     begin
-       { TODO : Save tasks for futher processing (for example after thread restart) }
-       TObject(ATask).Free;
-     end;
+     { TODO : Save tasks for futher processing (for example after thread restart) }
+     ATask.Free;
   until ATask=nil;
 end;
 
