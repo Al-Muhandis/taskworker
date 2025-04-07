@@ -12,7 +12,7 @@ type
 
   { TgTaskWorkerThread }
 
-  generic TgTaskWorkerThread<T> = class(TThread)
+  generic TgTaskWorkerThread<T: TObject> = class(TThread)
   private
     FLogger: TEventLog;
     FCount: Integer;
@@ -24,6 +24,7 @@ type
     function PopTask: T;
     function WaitingForTask: Boolean;
   protected
+    procedure BeforeStart; virtual;
     procedure DoIdle; virtual;
     procedure ProcessTask(ATask: T); virtual; abstract;
     function WaitingDelay(ADelay: Integer): Boolean;
@@ -49,6 +50,11 @@ begin
   RTLeventWaitFor(FUnblockEvent);
   RTLeventResetEvent(FUnblockEvent);
   Result:=not Terminated;
+end;
+
+procedure TgTaskWorkerThread.BeforeStart;
+begin
+  // do nothing
 end;
 
 function TgTaskWorkerThread.WaitingDelay(ADelay: Integer): Boolean;
@@ -119,6 +125,7 @@ var
   ATask: T;
 begin
   try
+    BeforeStart;
     while not Terminated do
     begin
       if not WaitingForTask then break;
@@ -137,7 +144,7 @@ end;
 
 procedure TgTaskWorkerThread.PushTask(ATask: T);
 begin
-  FThreadList.Add(ATask);
+  FThreadList.Add(pointer(ATask));
   Inc(FCount);
   RTLeventSetEvent(FUnblockEvent);
 end;
