@@ -7,7 +7,7 @@
       <Version Value="11"/>
       <PathDelim Value="\"/>
       <SearchPaths>
-        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)\"/>
+        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
     <Version Release="1"/>
@@ -19,6 +19,10 @@
       <Item>
         <Filename Value="logworker.pas"/>
         <UnitName Value="logworker"/>
+      </Item>
+      <Item>
+        <Filename Value="filetaskworker.pas"/>
+        <UnitName Value="filetaskworker"/>
       </Item>
     </Files>
     <RequiredPkgs>

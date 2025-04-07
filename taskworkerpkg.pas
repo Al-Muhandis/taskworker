@@ -8,7 +8,7 @@ unit TaskWorkerPkg;
 interface
 
 uses
-  taskworker, logworker;
+  taskworker, logworker, filetaskworker;
 
 implementation
 
