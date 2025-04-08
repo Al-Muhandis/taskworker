@@ -41,10 +41,10 @@ type
     procedure SaveJSONToFile(const aJSON: String);         
     procedure DeleteProcessedTask(const aTaskName: string);
     procedure MoveProcessedTask(const aTaskName: string; aIsOk: Boolean);
-    procedure DoProcessTask(aTask: TTask; out aIsOk: Boolean);
   protected
-    procedure BeforeStart; override;
-    procedure ProcessTask(aTask: TTaskFile); override;
+    procedure BeforeStart; override;               
+    procedure DoProcessTask(aTask: TTask; out aIsOk: Boolean); virtual;
+    procedure ProcessTask(aTask: TTaskFile); override; final;
   public
     constructor Create; override;
     procedure SendTask(aTask: TTask);
@@ -200,10 +200,17 @@ begin
     if LoadTaskFromFile(aTask.FileName, aTaskData) then
     begin
       Logger.Info('Processing task from file: ' + aTask.FileName);
-      DoProcessTask(aTaskData, aIsOk);
+      try
+        DoProcessTask(aTaskData, aIsOk);
+      except
+        on E: Exception do begin
+          aIsOk:=False;
+          Logger.Error('An error occurs while process event. %s: %s', [E.ClassName, E.Message]);
+        end;
+      end;
       MoveProcessedTask(aTask.FileName, aIsOk);
-      if FDeleteProcessed then
-        DeleteFile(aTask.FileName);
+      if FDeleteProcessed and aIsOk then    // if there is an error while process event the task must be in the error folder
+        DeleteProcessedTask(aTask.FileName);
     end
     else
       Logger.Error('Can''t load task file %s', [ATask.FileName]);
