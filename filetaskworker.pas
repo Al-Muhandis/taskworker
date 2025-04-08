@@ -22,6 +22,8 @@ type
     property FileName: TTaskName read FFileName write FFileName;
   end;
 
+  TTaskResult = (trNone, trUnprocessed, trProcessed, trError);
+
   { TgFileTaskWorkerThread }
 
   generic TgFileTaskWorkerThread<TTask: TObject>= class(specialize TgTaskWorkerThread<TTaskFile>)
@@ -36,10 +38,12 @@ type
     FSpoolDir: string;
     FProcessedDir: string;  
     FErrorDir: string;
-    procedure EnsureDirsExist;
+    procedure EnsureDirsExist;                                 
+    function FileFromTaskName(const aTaskName: String; aTaskResult: TTaskResult = trUnprocessed): String;
+    procedure FindFreeTaskName(var aTaskName: TTaskName; aTaskResult: TTaskResult = trUnprocessed);
     function GetGUIDTaskName: String;
     function LoadTaskFromFile(const aTaskName: string; aObject: TTask): Boolean;
-    procedure SaveJSONToFile(const aJSON: String; const aTaskName: TTaskName);
+    function SaveJSONToFile(const aJSON: String; const aTaskName: TTaskName): Boolean;
     procedure DeleteProcessedTask(const aTaskName: string);
     procedure MoveProcessedTask(const aTaskName: string; aIsOk: Boolean);
     procedure LoadAllTasks;
@@ -74,7 +78,7 @@ begin
   begin
     repeat
       if (aSearchRec.Attr and faDirectory = 0) then
-        aFiles.Add(aSearchRec.Name);
+        aFiles.Add(ChangeFileExt(aSearchRec.Name, EmptyStr));
     until FindNext(aSearchRec) <> 0;
   end;
   FindClose(aSearchRec);
@@ -97,6 +101,31 @@ begin
     ForceDirectories(FProcessedDir);
   if not DirectoryExists(FErrorDir) then
     ForceDirectories(FErrorDir);
+end;
+
+function TgFileTaskWorkerThread.FileFromTaskName(const aTaskName: String; aTaskResult: TTaskResult): String;
+begin
+  case aTaskResult of
+    trProcessed: Result:=Format(FProcessedDir+'%s.json', [aTaskName]);
+    trError:     Result:=Format(FErrorDir+'%s.json',     [aTaskName]);
+  else
+    Result:=Format(FSpoolDir+'%s.json', [aTaskName]);
+  end;
+end;
+
+procedure TgFileTaskWorkerThread.FindFreeTaskName(var aTaskName: TTaskName; aTaskResult: TTaskResult);
+var
+  i: Integer;
+  aNewTaskName: String;
+begin
+  i:=0;
+  aNewTaskName:=aTaskName;
+  while FileExists(FileFromTaskName(aNewTaskName, aTaskResult)) do
+  begin
+    Inc(i);
+    aNewTaskName:=aTaskName+'_'+i.ToString;
+  end;
+  aTaskName:=aNewTaskName;
 end;
 
 function TgFileTaskWorkerThread.GetGUIDTaskName: String;
@@ -122,7 +151,7 @@ begin
   try
     aJSONStr := TStringList.Create;
     try
-      aJSONStr.LoadFromFile(FSpoolDir + aTaskName+'.json');
+      aJSONStr.LoadFromFile(FileFromTaskName(aTaskName));
       aDestreamer:=TJSONDeStreamer.Create(nil);
       try
         aDestreamer.JSONToObject(aJSONStr.Text, aObject);
@@ -139,12 +168,14 @@ begin
   end;
 end;
 
-procedure TgFileTaskWorkerThread.SaveJSONToFile(const aJSON: String; const aTaskName: TTaskName);
+function TgFileTaskWorkerThread.SaveJSONToFile(const aJSON: String; const aTaskName: TTaskName): Boolean;
 var
   aJSONStr: TStringList;
   aStreamer: TJSONStreamer;
   aTempFileName: String;
+  aNewTaskName: TTaskName;
 begin
+  Result:=False;
   aJSONStr := TStringList.Create;
   try
     aStreamer:=TJSONStreamer.Create(nil);
@@ -153,12 +184,15 @@ begin
         aJSONStr.Text:=aJSON;
         aTempFileName:=GetTempFileName;
         aJSONStr.SaveToFile(aTempFileName);
-        if not RenameFile(aTempFileName, Format(FSpoolDir+'%s.json', [aTaskName])) then
+        aNewTaskName:=aTaskName;
+        FindFreeTaskName(aNewTaskName);
+        if not RenameFile(aTempFileName, FileFromTaskName(aNewTaskName)) then
         begin
-          Logger.Error('SendTask. Cannot rename file. Old file: %s, new file: %s', [aTempFileName, aTaskName]);
+          Logger.Error('SendTask. Cannot rename file. Old file: %s, new file: %s', [aTempFileName, aNewTaskName]);
           Exit;
         end;
-        PushTask(TTaskFile.Create(aTaskName));
+        PushTask(TTaskFile.Create(aNewTaskName));
+        Result:=True;
       except
         on E: Exception do
           Logger.Error('SaveTaksToFile, task streaming & saving. %s: %s', [E.ClassName, E.Message]);
@@ -173,24 +207,23 @@ end;
 
 procedure TgFileTaskWorkerThread.DeleteProcessedTask(const aTaskName: string);
 begin
-  if not DeleteFile(FSpoolDir+aTaskName+'.json') then
+  if not DeleteFile(FileFromTaskName(aTaskName)) then
     Logger.Error('Can''t delete task %s', [aTaskName]);
 end;
 
 procedure TgFileTaskWorkerThread.MoveProcessedTask(const aTaskName: string; aIsOk: Boolean);
 var
-  aNewDir: String;
+  aNewTaskName: TTaskName;
+  aTaskResult: TTaskResult;
 begin
-  try
-    if aIsOk then
-      aNewDir:=FProcessedDir+aTaskName+'.json'
-    else
-      aNewDir:=FErrorDir+aTaskName+'.json';
-    RenameFile(FSpoolDir+aTaskName+'.json', aNewDir);
-  except
-    on E: Exception do
-      Logger.Error('Error moving task file %s: %s', [aTaskName, E.Message]);
-  end;
+  if aIsOk then
+    aTaskResult:=trProcessed
+  else
+    aTaskResult:=trError;
+  aNewTaskName:=aTaskName;
+  FindFreeTaskName(aNewTaskName, aTaskResult);
+  if not RenameFile(FileFromTaskName(aTaskName), FileFromTaskName(aNewTaskName, aTaskResult)) then
+    Logger.Error('Can''t move task file %s to %s', [aTaskName, aNewTaskName]);
 end;
 
 procedure TgFileTaskWorkerThread.LoadAllTasks;
@@ -283,7 +316,8 @@ begin
   try
     try
       aTaskName:=GetTaskName(aTask);
-      SaveJSONToFile(aStreamer.ObjectToJSONString(aTask), aTaskName);
+      if not SaveJSONToFile(aStreamer.ObjectToJSONString(aTask), aTaskName) then
+        Logger.Error('Can''t save task file %s', [aTaskName]);
     except
       on E: Exception do
         Logger.Error('SaveTaksToFile, task streaming & saving. %s: %s', [E.ClassName, E.Message]);

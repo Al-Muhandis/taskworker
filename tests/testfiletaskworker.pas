@@ -98,6 +98,7 @@ begin
   { #Warning: Must be overriden by ancestor where FWorker must be created! }
   FWorker.Logger.AppendContent:=True;
   FWorker.Logger.LogType:=ltFile;
+  FWorker.LoadTasksOnStart:=True;
   FWorker.Start;
 end;
 
