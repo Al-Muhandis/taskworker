@@ -48,6 +48,7 @@ type
   TTestFileTaskWorkerThreadOverride = class(specialize TgFileTaskWorkerThread<TSampleTask>)
   protected
     procedure DoProcessTask(aTask: TSampleTask; out aIsOk: Boolean); override;
+    function GetTaskName(aTask: TSampleTask): TTaskName; override;
   public
     FTestCase: TTestCase;
   end;
@@ -120,6 +121,11 @@ procedure TTestFileTaskWorkerThreadOverride.DoProcessTask(aTask: TSampleTask; ou
 begin
   inherited;
   TTestFileTaskOverride.TestFileTaskProcessTask(aTask, aIsOk);
+end;
+
+function TTestFileTaskWorkerThreadOverride.GetTaskName(aTask: TSampleTask): TTaskName;
+begin
+  Result:=aTask.SomeIntProperty.ToString;
 end;
 
 { TTestFileTaskOverride }

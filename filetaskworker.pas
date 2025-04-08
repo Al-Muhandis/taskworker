@@ -5,7 +5,7 @@ unit filetaskworker;
 interface
 
 uses
-  Classes, windows, SysUtils, fpjson, jsonparser, taskworker
+  Classes, SysUtils, fpjson, jsonparser, taskworker
   ;
 
 type
@@ -29,6 +29,7 @@ type
     TProcessTaskEvent = procedure (aTask: TTask; var aIsOk: Boolean) of object;
   private
     FDeleteProcessed: Boolean;
+    FLoadTasksOnStart: Boolean;
     FOnProcessTask: TProcessTaskEvent;
     FPoolSubDir: String;
     FRootPoolDir: String;
@@ -36,14 +37,16 @@ type
     FProcessedDir: string;  
     FErrorDir: string;
     procedure EnsureDirsExist;
-    function GetTaskName: String;
+    function GetGUIDTaskName: String;
     function LoadTaskFromFile(const aTaskName: string; aObject: TTask): Boolean;
-    procedure SaveJSONToFile(const aJSON: String);         
+    procedure SaveJSONToFile(const aJSON: String; const aTaskName: TTaskName);
     procedure DeleteProcessedTask(const aTaskName: string);
     procedure MoveProcessedTask(const aTaskName: string; aIsOk: Boolean);
+    procedure LoadAllTasks;
   protected
     procedure BeforeStart; override;               
     procedure DoProcessTask(aTask: TTask; out aIsOk: Boolean); virtual;
+    function GetTaskName(aTask: TTask): TTaskName; virtual;
     procedure ProcessTask(aTask: TTaskFile); override; final;
   public
     constructor Create; override;
@@ -52,13 +55,30 @@ type
     property RootPoolDir: String read FRootPoolDir write FRootPoolDir;                 
     property PoolSubDir: String read FPoolSubDir write FPoolSubDir;
     property DeleteProcessed: Boolean read FDeleteProcessed write FDeleteProcessed;
+    property LoadTasksOnStart: Boolean read FLoadTasksOnStart write FLoadTasksOnStart;
   end;
+
+procedure FindAllFiles(const aDirectory, aFileMask: string; aFiles: TStringList);
 
 implementation
 
 uses
   fpjsonrtti
   ;
+
+procedure FindAllFiles(const aDirectory, aFileMask: string; aFiles: TStringList);
+var
+  aSearchRec: TSearchRec;
+begin
+  if FindFirst(IncludeTrailingPathDelimiter(aDirectory) + aFileMask, faAnyFile, aSearchRec) = 0 then
+  begin
+    repeat
+      if (aSearchRec.Attr and faDirectory = 0) then
+        aFiles.Add(aSearchRec.Name);
+    until FindNext(aSearchRec) <> 0;
+  end;
+  FindClose(aSearchRec);
+end;
 
 { TTaskFile }
 
@@ -79,7 +99,7 @@ begin
     ForceDirectories(FErrorDir);
 end;
 
-function TgFileTaskWorkerThread.GetTaskName: String;
+function TgFileTaskWorkerThread.GetGUIDTaskName: String;
 var
   aCode: Integer;
   aGUID: TGUID;
@@ -119,11 +139,11 @@ begin
   end;
 end;
 
-procedure TgFileTaskWorkerThread.SaveJSONToFile(const aJSON: String);
+procedure TgFileTaskWorkerThread.SaveJSONToFile(const aJSON: String; const aTaskName: TTaskName);
 var
   aJSONStr: TStringList;
   aStreamer: TJSONStreamer;
-  aTempFileName, aTaskName: String;
+  aTempFileName: String;
 begin
   aJSONStr := TStringList.Create;
   try
@@ -133,7 +153,6 @@ begin
         aJSONStr.Text:=aJSON;
         aTempFileName:=GetTempFileName;
         aJSONStr.SaveToFile(aTempFileName);
-        aTaskName:=GetTaskName;
         if not RenameFile(aTempFileName, Format(FSpoolDir+'%s.json', [aTaskName])) then
         begin
           Logger.Error('SendTask. Cannot rename file. Old file: %s, new file: %s', [aTempFileName, aTaskName]);
@@ -174,11 +193,37 @@ begin
   end;
 end;
 
+procedure TgFileTaskWorkerThread.LoadAllTasks;
+var
+  aTaskFiles: TStringList;
+  aFileName: String;
+  aTaskFile: TTaskFile;
+begin
+  aTaskFiles:=TStringList.Create;
+  try
+    FindAllFiles(FSpoolDir, '*.json', aTaskFiles);
+    if aTaskFiles.Count>0 then
+      Logger.Warning('There are %d unprocessed task(s) found!', [aTaskFiles.Count]);
+    for aFileName in aTaskFiles do
+    begin
+      aTaskFile:=TTaskFile.Create(aFileName);
+      PushTask(aTaskFile);
+    end;
+  finally
+    aTaskFiles.Free;
+  end;
+end;
+
 procedure TgFileTaskWorkerThread.DoProcessTask(aTask: TTask; out aIsOk: Boolean);
 begin
   aIsOk:=False;
   if Assigned(FOnProcessTask) then
     FOnProcessTask(aTask, aIsOk);
+end;
+
+function TgFileTaskWorkerThread.GetTaskName(aTask: TTask): TTaskName;
+begin
+  Result:=GetGUIDTaskName;
 end;
 
 procedure TgFileTaskWorkerThread.BeforeStart;
@@ -188,6 +233,8 @@ begin
   FProcessedDir := FSpoolDir + 'processed'+DirectorySeparator;
   FErrorDir := FSpoolDir + 'error'+DirectorySeparator;
   EnsureDirsExist;
+  if FLoadTasksOnStart then
+    LoadAllTasks;
 end;
 
 procedure TgFileTaskWorkerThread.ProcessTask(aTask: TTaskFile);
@@ -230,11 +277,13 @@ end;
 procedure TgFileTaskWorkerThread.SendTask(aTask: TTask);
 var
   aStreamer: TJSONStreamer;
+  aTaskName: TTaskName;
 begin
   aStreamer:=TJSONStreamer.Create(nil);
   try
     try
-      SaveJSONToFile(aStreamer.ObjectToJSONString(aTask));
+      aTaskName:=GetTaskName(aTask);
+      SaveJSONToFile(aStreamer.ObjectToJSONString(aTask), aTaskName);
     except
       on E: Exception do
         Logger.Error('SaveTaksToFile, task streaming & saving. %s: %s', [E.ClassName, E.Message]);
