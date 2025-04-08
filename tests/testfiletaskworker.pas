@@ -23,17 +23,40 @@ type
 
   TTestFileTaskWorkerThread = specialize TgFileTaskWorkerThread<TSampleTask>;
 
-  { TTestFileTask }
+  { TBaseTestFileTask }
 
-  TTestFileTask= class(TTestCase)
+  TBaseTestFileTask=class(TTestCase) // abstract class
   private
-    FFileTaskWorker: TTestFileTaskWorkerThread;
-    procedure TestFileTaskProcessTask(aTask: TSampleTask; var aIsOk: Boolean);
+    FWorker: TTestFileTaskWorkerThread;
   protected
     procedure SetUp; override;
-    procedure TearDown; override;
+    procedure TearDown; override;                                                   
+    class procedure TestFileTaskProcessTask(aTask: TSampleTask; var aIsOk: Boolean);
   published
     procedure ProcessTask;
+  end;
+
+  { TTestFileTaskEvent }
+
+  TTestFileTaskEvent= class(TBaseTestFileTask)
+  protected
+    procedure SetUp; override;
+  end;
+
+  { TTestFileTaskWorkerThreadOverride }
+
+  TTestFileTaskWorkerThreadOverride = class(specialize TgFileTaskWorkerThread<TSampleTask>)
+  protected
+    procedure DoProcessTask(aTask: TSampleTask; out aIsOk: Boolean); override;
+  public
+    FTestCase: TTestCase;
+  end;
+
+  { TTestFileTaskOverride }
+
+  TTestFileTaskOverride= class(TBaseTestFileTask)
+  protected
+    procedure SetUp; override;
   end;
 
 implementation
@@ -46,7 +69,16 @@ const
   _SomeInt=777;  
   _SomeStr='Some string value!';
 
-procedure TTestFileTask.ProcessTask;
+{ TBaseTestFileTask }
+
+class procedure TBaseTestFileTask.TestFileTaskProcessTask(aTask: TSampleTask; var aIsOk: Boolean);
+begin
+  aIsOk:=True;
+  AssertEquals(Format('SomeIntValue must be %d', [_SomeInt]), _SomeInt, aTask.SomeIntProperty);
+  AssertEquals(Format('SomeStrValue must be %s', [_SomeStr]), _SomeStr, aTask.SomeStringProperty);
+end;
+
+procedure TBaseTestFileTask.ProcessTask;
 var
   aTask: TSampleTask;
 begin
@@ -54,37 +86,52 @@ begin
   try
     aTask.SomeIntProperty:=_SomeInt;
     aTask.SomeStringProperty:=_SomeStr;
-    FFileTaskWorker.SendTask(aTask);
-  finally                      
+    FWorker.SendTask(aTask);
+  finally
     aTask.Free;
   end;
 end;
 
-procedure TTestFileTask.TestFileTaskProcessTask(aTask: TSampleTask; var aIsOk: Boolean);
+procedure TBaseTestFileTask.SetUp;
 begin
-  aIsOk:=True;
-  AssertEquals(Format('SomeIntValue must be %d', [_SomeInt]), _SomeInt, aTask.SomeIntProperty); 
-  AssertEquals(Format('SomeIntValue must be %s', [_SomeStr]), _SomeStr, aTask.SomeStringProperty);
+  { #Warning: Must be overriden by ancestor where FWorker must be created! }
+  FWorker.Logger.AppendContent:=True;
+  FWorker.Logger.LogType:=ltFile;
+  FWorker.Start;
 end;
 
-procedure TTestFileTask.SetUp;
+procedure TBaseTestFileTask.TearDown;
 begin
-  FFileTaskWorker:=TTestFileTaskWorkerThread.Create;
-  FFileTaskWorker.OnProcessTask:=@TestFileTaskProcessTask;
-  FFileTaskWorker.Logger.AppendContent:=True;    
-  FFileTaskWorker.Logger.LogType:=ltFile;
-  FFileTaskWorker.Start;
+  FWorker.TerminateWorker;
+  FWorker.WaitFor;
+  FWorker.Free;
 end;
 
-procedure TTestFileTask.TearDown;
+procedure TTestFileTaskEvent.SetUp;
 begin
-  FFileTaskWorker.TerminateWorker;
-  FFileTaskWorker.WaitFor;
-  FFileTaskWorker.Free;
+  FWorker:=TTestFileTaskWorkerThread.Create;
+  FWorker.OnProcessTask:=@TestFileTaskProcessTask;
+  inherited;
+end;
+
+{ TTestFileTaskWorkerThreadOverride }
+
+procedure TTestFileTaskWorkerThreadOverride.DoProcessTask(aTask: TSampleTask; out aIsOk: Boolean);
+begin
+  inherited;
+  TTestFileTaskOverride.TestFileTaskProcessTask(aTask, aIsOk);
+end;
+
+{ TTestFileTaskOverride }
+
+procedure TTestFileTaskOverride.SetUp;
+begin
+  FWorker:=TTestFileTaskWorkerThreadOverride.Create;
+  inherited;
 end;
 
 initialization
-  RegisterTest(TTestFileTask);
+  RegisterTests([TTestFileTaskEvent, TTestFileTaskOverride]);
 
 end.
 
