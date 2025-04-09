@@ -207,7 +207,7 @@ end;
 
 procedure TgFileTaskWorkerThread.DeleteProcessedTask(const aTaskName: string);
 begin
-  if not DeleteFile(FileFromTaskName(aTaskName)) then
+  if not DeleteFile(FileFromTaskName(aTaskName, trProcessed)) then
     Logger.Error('Can''t delete task %s', [aTaskName]);
 end;
 
