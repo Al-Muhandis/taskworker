@@ -50,7 +50,7 @@ type
   protected
     procedure BeforeStart; override;               
     procedure DoProcessTask(aTask: TTask; out aIsOk: Boolean); virtual;
-    function GetTaskName(aTask: TTask): TTaskName; virtual;
+    function GetTaskName({%H-}aTask: TTask): TTaskName; virtual;
     procedure ProcessTask(aTask: TTaskFile); override; final;
   public
     constructor Create; override;

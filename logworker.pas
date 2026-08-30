@@ -51,12 +51,14 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure Activate;
-    procedure Debug(const aMessage: String);
+    procedure Debug(const aMessage: String);  
+    procedure Debug(const aMessage: String; Args : Array of const);
     procedure Error(const aMessage: String);
     Procedure Error (const aFormat : String; Args : Array of const);
     procedure Info(const aMessage: String);
     procedure Log(aEventType: TEventType; const aMessage: String);
-    procedure Warning(const aMessage: String);
+    procedure Warning(const aMessage: String);                     
+    procedure Warning(const aMessage: String; Args : Array of const);
     property Active: Boolean read FActive;
     property AppendContent: Boolean read FAppendContent write FAppendContent;
     property EventLogThread: TEventLogThread read FEventLogThread;
@@ -173,6 +175,11 @@ begin
   Log(etDebug, aMessage);
 end;
 
+procedure TThreadedEventLog.Debug(const aMessage: String; Args: array of const);
+begin
+  Debug(Format(aMessage, Args));
+end;
+
 procedure TThreadedEventLog.Error(const aMessage: String);
 begin
   Log(etError, aMessage);
@@ -207,6 +214,11 @@ end;
 procedure TThreadedEventLog.Warning(const aMessage: String);
 begin
   Log(etWarning, aMessage);
+end;
+
+procedure TThreadedEventLog.Warning(const aMessage: String; Args: array of const);
+begin
+  Log(etWarning, Format(aMessage, Args));
 end;
 
 end.
